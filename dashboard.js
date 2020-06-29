@@ -66,6 +66,7 @@ window.addEventListener('load', async () => {
 										})
 						})
 						
+						var pricePromise = new Promise(function (resolve, reject) {
 						jQuery.getJSON( 'https://api.coingecko.com/api/v3/coins/pamp-network', function( data ) {
 							
 							var totalVolume = 0, highestPriceUsd = 0, highestPriceEth = 0;
@@ -89,11 +90,18 @@ window.addEventListener('load', async () => {
 							} else {
 								jQuery('.price-change')[0].classList.add('red')
 							}
+							
+							resolve({
+								price: highestPriceUsd,
+								volume: totalVolume,
+								change: percentChange
+							});
 						
 						})
+						})
 						
-						var balance = 0, totalSupply = 0, timeStaked = 0, daysStaked = 0, lastClaimed = 0, streak = 0, lastUpdate = 0, timeSinceLastUpdate = 0, lastUpdatePrice = 0, lastUpdateVolume = 0, lastUpdateChange = 0, claimed = false;
-						var _inflationAdjustmentFactor = 100;
+						var balance = 0, totalSupply = 0, timeStaked = 0, daysStaked = 0, lastClaimed = 0, streak = 0, lastUpdate = 0, timeSinceLastUpdate = 0, lastUpdatePrice = 0, lastUpdateVolume = 0, lastUpdateChange = 0, lastUpdateNumerator = 0, lastUpdateDenominator = 0, claimed = false;
+						var _inflationAdjustmentFactor = 200;
 						
 						window.ethereum.enable().then(async function() {
 							
@@ -117,12 +125,19 @@ window.addEventListener('load', async () => {
 								})
 							})
 							
+							if(balance.div(Math.pow(10,18)) < 500) {
+								jQuery('.rewards')[0].innerText = "Ineligible - balance too low"
+								claimed = true;
+							}
+							
 							lastUpdate = await new Promise(function (resolve, reject) {
 								stakeContract.at("0x1d2121Efe25535850d1FDB65F930FeAB093416E0")._lastUpdate.call( function(err, data) { 
 									let lastDate = new Date(data[0].toNumber()*1000)
 									timeSinceLastUpdate = timeSince(lastDate);
+									lastUpdateNumerator = data[1].toNumber();
+									lastUpdateDenominator = data[2].toNumber();
 									lastUpdateChange = data[1].toNumber() / data[2].toNumber();
-									lastUpdatePrice = data[3].toNumber() / 1000;
+									lastUpdatePrice = data[3].toNumber();
 									lastUpdateVolume = data[4].toNumber()
 									resolve(data)
 								})
@@ -159,41 +174,51 @@ window.addEventListener('load', async () => {
 									resolve(data.toNumber())
 								})
 							})
-							if(claimed) {
+							
+							if(!claimed) {
+								jQuery('.rewards')[0].innerText = calculateNumTokens(balance, streak, inflationAdjustmentFactor, daysStaked, totalSupply, lastUpdatePrice, lastUpdateVolume, lastUpdateNumerator, lastUpdateDenominator) + " PAMP"
+							}
+							
+							let priceStruct = await pricePromise;
+							if(parseInt(priceStruct.change) <= 0) {
 								return;
 							}
-        					
-							if (streak > 1) {
-								inflationAdjustmentFactor /= streak;       // If there is a streak, we decrease the inflationAdjustmentFactor
-							}
-
-							if (daysStaked > 60) {      // If you stake for more than 60 days, you have hit the upper limit of the multiplier
-								daysStaked = 60;
-							} else if (daysStaked == 0) {   // If the minimum days staked is zero, we change the number to 1 so we don't return zero below
-								daysStaked = 1;
-							}
-
-							let marketCap = mulDiv(totalSupply, lastUpdatePrice*1000, 1000E18);       // Market cap (including locked team tokens)
-
-							let ratio = marketCap / lastUpdateVolume;   // Ratio of market cap to volume
-
-							if (ratio > 50) {  // Too little volume. Decrease rewards. To be honest, this number was arbitrarily chosen.
-								inflationAdjustmentFactor = inflationAdjustmentFactor * 10;
-							} else if (ratio > 25) { // Still not enough. Streak doesn't count.
-								inflationAdjustmentFactor = _inflationAdjustmentFactor;
-							}
-
-							let numTokens = mulDiv(balance, lastUpdate[1].toNumber() * daysStaked, lastUpdate[2].toNumber() * inflationAdjustmentFactor);      // Function that calculates how many tokens are due. See muldiv below.
-							let tenPercent = mulDiv(balance, 1, 10);
-
-							if (numTokens > tenPercent) {       // We don't allow a daily rewards of greater than ten percent of a holder's balance.
-								numTokens = tenPercent;
-							}
-
-							jQuery('.rewards')[0].innerText = (numTokens / 1E18).toFixed(2) + " PAMP"
+							let numTokens = calculateNumTokens(balance, streak, inflationAdjustmentFactor, daysStaked, totalSupply, priceStruct.price.toFixed(3)*1000, priceStruct.volume, parseInt(priceStruct.change), 100)
+							jQuery('.next')[0].innerText = numTokens + " PAMP"				
 							
 						})
 					}
+			
+			function calculateNumTokens(balance, streak, inflationAdjustmentFactor, daysStaked, totalSupply, lastUpdatePrice, lastUpdateVolume, lastUpdateNumerator, lastUpdateDenominator) {
+				if (streak > 1) {
+					inflationAdjustmentFactor = Math.floor(inflationAdjustmentFactor / streak);       // If there is a streak, we decrease the inflationAdjustmentFactor
+				}
+
+				if (daysStaked > 60) {      // If you stake for more than 60 days, you have hit the upper limit of the multiplier
+					daysStaked = 60;
+				} else if (daysStaked == 0) {   // If the minimum days staked is zero, we change the number to 1 so we don't return zero below
+					daysStaked = 1;
+				}
+
+				let marketCap = mulDiv(totalSupply, lastUpdatePrice, 1000E18);       // Market cap (including locked team tokens)
+
+				let ratio = marketCap / lastUpdateVolume;   // Ratio of market cap to volume
+
+				if (ratio > 50) {  // Too little volume. Decrease rewards. To be honest, this number was arbitrarily chosen.
+					inflationAdjustmentFactor = inflationAdjustmentFactor * 10;
+				} else if (ratio > 25) { // Still not enough. Streak doesn't count.
+					inflationAdjustmentFactor = _inflationAdjustmentFactor;
+				}
+
+				let numTokens = mulDiv(balance, lastUpdateNumerator * daysStaked, lastUpdateDenominator * inflationAdjustmentFactor);      // Function that calculates how many tokens are due. See muldiv below.
+				let tenPercent = mulDiv(balance, 1, 10);
+
+				if (numTokens > tenPercent) {       // We don't allow a daily rewards of greater than ten percent of a holder's balance.
+					numTokens = tenPercent;
+				}
+				
+				return (numTokens / 1E18).toFixed(2);
+			}
 			
 			function mulDiv(balance, numerator, denominator) {
 				return balance * (numerator / denominator);
