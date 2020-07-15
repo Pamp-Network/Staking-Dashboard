@@ -92,16 +92,6 @@ function liquidityStaking() {
 							jQuery('.expectedStaked')[0].innerText = (expectedRewards / 1E18).toFixed(2) + " PAMP"
 						}
 						
-						oldStaker = await new Promise(function(resolve, reject) { 
-								liquidityContract.at("0x2CAe1f213e008DB76b2844e488a81ACEDfda9abE").getStaker(web3.eth.defaultAccount, function(err, data) {
-									if(err !== null) { reject(err) }
-									resolve(data)
-								})
-                             })
-						
-						if(oldStaker[1].toNumber() > 0) {
-							jQuery('.oldContractBalance')[0].innerText = (oldStaker[1] / 1E18).toFixed(6) + " UNI-V2"
-						}
 						
 						
 						let currentAvailableRewards = await new Promise(function(resolve, reject) { 
