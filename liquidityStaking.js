@@ -17,25 +17,16 @@ function timeSince(date) {
 					  }
 					  return Math.floor(seconds) + " seconds";
 					}
-			
-			
-			
-			
-			
-			var currentStaker;
 
-function liquidityStaking() {
+async function liquidityStaking() {
 					
 						jQuery('.approve').click(function(object) {
-							window.ethereum.enable().then(function() { 
 							uniPairContract.at("0x1c608235e6a946403f2a048a38550befe41e1b85").approve("0x5CECDbdfB96463045b07d07aAa4fc2F1316F7e47", 10000000000000000000000000, function(err, txhash) {
 											console.log(err)
 											console.log(txhash)
 							})
-							})
 						})
 						
-					window.ethereum.enable().then(async function() {
 						
 						
 						let totalSupplyUniV2 = await new Promise(function(resolve, reject) { 
@@ -92,6 +83,12 @@ function liquidityStaking() {
 							jQuery('.expectedStaked')[0].innerText = (expectedRewards / 1E18).toFixed(2) + " PAMP"
 						}
 						
+					
+						let estimatedPampLiquidity = mulDiv(liquidityPamp, currentStaker[1], totalSupplyUniV2) + mulDiv(liquidityPamp, balanceUniV2, totalSupplyUniV2);
+					
+						let estimatedWethLiquidity = mulDiv(liquidityWeth, currentStaker[1], totalSupplyUniV2) + mulDiv(liquidityWeth, balanceUniV2, totalSupplyUniV2);
+					
+						jQuery('.stakerLiquidity')[0].innerText = `Your estimated Uniswap liquidity: ${(estimatedWethLiquidity / 1E18).toFixed(2)} ETH, ${(estimatedPampLiquidity / 1E18).toFixed(2)} PAMP`;
 						
 						
 						let currentAvailableRewards = await new Promise(function(resolve, reject) { 
@@ -115,7 +112,7 @@ function liquidityStaking() {
 						
 						jQuery('.deposit').click(function(object) {
 							
-							window.ethereum.enable().then(function() { 
+
 								let tokens = parseFloat(jQuery('#numDeposit')[0].value);
 										tokens = tokens * Math.pow(10, 18);
 										if(tokens <= 0 || isNaN(tokens)) {
@@ -124,13 +121,21 @@ function liquidityStaking() {
 										if(tokens > balanceUniV2) {
 											window.alert("UNI-V2 balance too low. Your UNI-V2 balance is " + (balanceUniV2 / 1E18))
 										} else {
-											liquidityContract.at("0x5CECDbdfB96463045b07d07aAa4fc2F1316F7e47").stakeLiquidityTokens(tokens, function(err, txhash) {
-											console.log(err)
-											console.log(txhash)
-											})
+											
+											if(currentStaker[1] > 0 && window.confirm(`Warning: Adding more liquidity to your balance will reduce your staking time.`)) {
+												liquidityContract.at("0x5CECDbdfB96463045b07d07aAa4fc2F1316F7e47").stakeLiquidityTokens(tokens, function(err, txhash) {
+												console.log(err)
+												console.log(txhash)
+												})
+											} else if(currentStaker[1] == 0) {
+												liquidityContract.at("0x5CECDbdfB96463045b07d07aAa4fc2F1316F7e47").stakeLiquidityTokens(tokens, function(err, txhash) {
+												console.log(err)
+												console.log(txhash)
+												})
+											}
+											
 										}
-										
-							})
+											
 						})
 					
 						jQuery('.withdraw').click(function(object) {
@@ -139,11 +144,11 @@ function liquidityStaking() {
 							if(tokens <= 0 || isNaN(tokens)) {
 								return;
 							}
-							if (tokens > currentStaker[1] && false) {
+							if (tokens > currentStaker[1]) {
 								window.alert("Contract balance too low. Your UNI-V2 balance in the contract is " + (currentStaker[1] / 1E18))
-							} /*else if (!jQuery('.days')[0].innerText.includes("days")) {
+							} else if (!jQuery('.days')[0].innerText.includes("days")) {
 								window.alert("You must stake for at least 2 days to withdraw rewards. You have staked for " + jQuery('.days')[0].innerText)
-							}*/ else {
+							} else {
 								liquidityContract.at("0x5CECDbdfB96463045b07d07aAa4fc2F1316F7e47").withdrawLiquidityTokens(tokens, function(err, txhash) {
 											console.log(err)
 											console.log(txhash)
@@ -155,7 +160,7 @@ function liquidityStaking() {
 						
 						
 						
-					})
+					
 						
 					
 						
